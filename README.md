@@ -81,6 +81,7 @@ So next step is we will read the data from the tape and copy it to a RK05 disks 
 Create an ini file with the script:
 
 ```
+cat > tboot.ini << "EOF"
 set cpu 11/40
 set tm0 locked
 attach tm0 dist.tap
@@ -92,7 +93,6 @@ attach rk0 rk0
 attach rk1 rk1
 attach rk2 rk2
 attach rk3 rk3
-
 d cpu 100000 012700
 d cpu 100002 172526
 d cpu 100004 010040
@@ -100,6 +100,7 @@ d cpu 100006 012740
 d cpu 100010 060003
 d cpu 100012 000777
 g 100000
+EOF
 ```
 
 The first few lines are Simh instructions, it sets the CPU type and attached the tape file, and 3 disks. 
@@ -176,5 +177,35 @@ count
 =
 ```
 
-CTRL+E to break the emulation.  Now rk0 is a bootable disk. You can backup it.
+CTRL+E to break the emulation.  Now rk0 is a bootable disk. You can backup it in your host system.
 
+### 1.2 Boot Unix V6
+
+This is a lot easier. Prepare another ini file dboot.ini:
+
+```bash
+cat > dboot.ini << "EOF"
+set cpu 11/40
+set tto 7b
+set tm0 locked
+attach tm0 dist.tap
+set rk0 en noautosize
+set rk1 en noautosize
+set rk2 en noautosize
+set rk3 en noautosize
+attach rk0 rk0
+attach rk1 rk1
+attach rk2 rk2
+attach rk3 rk3
+attach ptr ptr.txt
+attach ptp ptp.txt
+attach lpt lpt.txt
+dep system sr 173030
+boot rk0
+EOF
+```
+Note the last line is to boot from the disk we prepared.
+
+Run
+
+`pdp11 dboot.ini`
