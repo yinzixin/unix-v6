@@ -30,22 +30,19 @@ Get a copy of Wolfgang’s fixes and the enblock and deblock program source code
 `curl -O https://www.tuhs.org/Archive/Distributions/Research/Bug_Fixes/V6enb/v6enb.tar.gz`
 
 Upack
-<code>
+```bash
 gunzip v6.tape.gz
-
 tar xvf v6enb.tar.gz
-</code>
+```
 
 Build the enblock and deblock utilities
 Warnings are non-fatal and are related to the dialect of C that Wolfgang is using:
 
-<code>
+```bash
 cd v6enb
-
 cc -Wno-implicit-function-declaration enblock.c -o enblock
-
 cc -Wno-implicit-function-declaration deblock.c -o deblock
-</code>
+```
 
 Use enblock to read v6.tape and convert it into dist.tap
 
@@ -83,61 +80,43 @@ So next step is we will read the data from the tape and copy it to a RK05 disks 
 
 Create an ini file with the script:
 
-<code>
-
+```
 set cpu 11/40
-
 set tm0 locked
-
 attach tm0 dist.tap
-
 set rk0 en noautosize
-
 set rk1 en noautosize
-
 set rk2 en noautosize
-
 set rk3 en noautosize
-
 attach rk0 rk0
-
 attach rk1 rk1
-
 attach rk2 rk2
-
 attach rk3 rk3
 
 d cpu 100000 012700
-
 d cpu 100002 172526
-
 d cpu 100004 010040
-
 d cpu 100006 012740
-
 d cpu 100010 060003
-
 d cpu 100012 000777
-
 g 100000
-
-</code>
+```
 
 The first few lines are Simh instructions, it sets the CPU type and attached the tape file, and 3 disks. 
 d cpu is the raw instruction that write machine code at specific address, and g 10000 means starting executing code at the address. What this a few lines of machine code do is:
-Loads the tape controller’s register address into R0.
+1. Loads the tape controller’s register address into R0.
 
-1. Writes the command 060003 to the controller, which tells it to:
+2. Writes the command 060003 to the controller, which tells it to:
 
-2. perform a read operation,
+3. perform a read operation,
 
-3. use device unit 0,
+4. use device unit 0,
 
-4. transfer one block to memory starting at address 0.
+5. transfer one block to memory starting at address 0.
 
-5. The last instruction (BR .-2) loops forever, waiting for the controller to finish the read.
+6. The last instruction (BR .-2) loops forever, waiting for the controller to finish the read.
 
-6. Once the first block (the boot block) has been read into memory location 0, the operator typically enters g 0 to execute the loaded boot code.
+7. Once the first block (the boot block) has been read into memory location 0, the operator typically enters g 0 to execute the loaded boot code.
 
 This code is the PDP-11 bootstrap sequence used in early UNIX V6 installation procedures.
 Operators used to enter these words manually on the front panel switches of the PDP-11.
@@ -149,23 +128,53 @@ Start the Open SimH PDP-11 emulator with tboot.ini
 `./pdp11 tboot.ini`
 
 You will see:
-<code>
+
+```
 PDP-11 simulator V4.0-0 Current        git commit id: 4dfb3508
-
 Disabling XQ
-
 ./tboot.ini-1> set cpu 11/40
-
 %SIM-INFO: RQ: RQDX3 controller not valid on a Unibus system, changing to UDA50
-
 %SIM-INFO: RQB: RQDX3 controller not valid on a Unibus system, changing to UDA50
-
 %SIM-INFO: RQC: RQDX3 controller not valid on a Unibus system, changing to UDA50
-
 %SIM-INFO: RQD: RQDX3 controller not valid on a Unibus system, changing to UDA50
-
 ./tboot.ini-3> attach tm0 dist.tap
-
 %SIM-INFO: TM0: Tape Image 'dist.tap' scanned as SIMH format
 
-</code>
+```
+
+Now CPU is in a infinite loop and first block is in memory. Press Ctrl+E to simulate the restart of CPU, and enter `g 0` to let CPU execute the loader program.
+
+```
+Simulation stopped, PC: 100012 (BR 100012)
+sim> g 0
+=
+```
+
+The = is the prompt of the loader program. Now we can use tmrk to copy tape into disk.
+
+Use the tmrk utility to copy the disk bootstrap program from tape to the disk block 0:
+
+```
+=tmrk 
+disk offset
+0
+tape offset
+100
+count
+1
+```
+
+Use tmrk to copy the root filesystem (tape position 101-4100) to disk
+```
+=tmrk
+disk offset
+1
+tape offset
+101
+count
+3999
+=
+```
+
+CTRL+E to break the emulation.  Now rk0 is a bootable disk. You can backup it.
+
