@@ -209,3 +209,276 @@ Note the last line is to boot from the disk we prepared.
 Run
 
 `pdp11 dboot.ini`
+
+It will show the boot prompt  @ .
+
+Currently, the V6 binary is located at /rkunix , so input rkunix and press enter. Now, you're logged into Unix V6.
+
+```
+@rkunix
+mem = 1036
+# LS
+BIN
+DEV
+ETC
+HPUNIX
+LIB
+MNT
+RKUNIX
+RPUNIX
+TMP
+UNIX
+USR
+
+```
+
+Use 
+
+```
+STTY -LCASE
+```
+
+to set the terminal to use lower case.
+
+## Step 2: Prepare environments for building the source
+
+### 2.1 Mount extra disks and devices
+
+The disk size of rk0 is very small, so we need do the building in another disk.
+Simh already simulated a few devices, we need create special file for them.
+```
+/etc/mknod /dev/rk0 b 0 0
+/etc/mknod /dev/rk1 b 0 1
+/etc/mknod /dev/rk2 b 0 2
+/etc/mknod /dev/rk3 b 0 3
+/etc/mknod /dev/mt0 b 3 0
+/etc/mknod /dev/tap0 b 4 0
+/etc/mknod /dev/rrk0 c 9 0
+/etc/mknod /dev/rrk1 c 9 1
+/etc/mknod /dev/rrk2 c 9 2
+/etc/mknod /dev/rrk3 c 9 3
+
+```
+Mount rk3 to /usr/data
+
+```
+/etc/mkfs /dev/rk3 4800
+mkdir /usr/data
+/etc/mount /dev/rk3 /usr/data
+```
+
+### 2.2 Copy source code to new disk
+
+The source code in this distributions is in /usr/sys, more specifically, there are 3 sub folders in /usr/sys, the conf folder, which contains bootloaders and configurations; the ken folder, contains main source codes of v6, and dmr, contains drivers for devices. We need copy all these files to /usr/data . The v6 does not support cp *  command yet, we can just copy one by one.
+
+```
+chdir /usr/data
+
+cp /usr/sys/buf.h .
+cp /usr/sys/conf.h .
+cp /usr/sys/file.h .
+cp /usr/sys/filsys.h .
+cp /usr/sys/ino.h .
+cp /usr/sys/inode.h .
+cp /usr/sys/param.h .
+cp /usr/sys/proc.h .
+cp /usr/sys/reg.h .
+cp /usr/sys/seg.h .
+cp /usr/sys/systm.h .
+cp /usr/sys/text.h .
+cp /usr/sys/tty.h .
+cp /usr/sys/user.h .
+
+mkdir ken
+
+cp /usr/sys/ken/alloc.c ken
+cp /usr/sys/ken/clock.c ken
+cp /usr/sys/ken/fio.c ken
+cp /usr/sys/ken/iget.c ken
+cp /usr/sys/ken/main.c ken
+cp /usr/sys/ken/malloc.c ken
+cp /usr/sys/ken/nami.c ken
+cp /usr/sys/ken/pipe.c ken
+cp /usr/sys/ken/prf.c ken
+cp /usr/sys/ken/rdwri.c ken
+cp /usr/sys/ken/sig.c ken
+cp /usr/sys/ken/slp.c ken
+cp /usr/sys/ken/subr.c ken
+cp /usr/sys/ken/sys1.c ken
+cp /usr/sys/ken/sys2.c ken
+cp /usr/sys/ken/sys3.c ken
+cp /usr/sys/ken/sys4.c ken
+cp /usr/sys/ken/sysent.c ken
+cp /usr/sys/ken/text.c ken
+cp /usr/sys/ken/trap.c ken
+
+mkdir dmr
+cp /usr/sys/dmr/bio.c dmr
+cp /usr/sys/dmr/cat.c dmr
+cp /usr/sys/dmr/dc.c dmr
+cp /usr/sys/dmr/dh.c dmr
+cp /usr/sys/dmr/dhdm.c dmr
+cp /usr/sys/dmr/dhfdm.c dmr
+cp /usr/sys/dmr/dn.c dmr
+cp /usr/sys/dmr/dp.c dmr
+cp /usr/sys/dmr/hp.c dmr
+cp /usr/sys/dmr/hs.c dmr
+cp /usr/sys/dmr/ht.c dmr
+cp /usr/sys/dmr/kl.c dmr
+cp /usr/sys/dmr/lp.c dmr
+cp /usr/sys/dmr/mem.c dmr
+cp /usr/sys/dmr/partab.c dmr
+cp /usr/sys/dmr/pc.c dmr
+cp /usr/sys/dmr/rf.c dmr
+cp /usr/sys/dmr/rk.c dmr
+cp /usr/sys/dmr/rp.c dmr
+cp /usr/sys/dmr/sys.c dmr
+cp /usr/sys/dmr/tc.c dmr
+cp /usr/sys/dmr/tm.c dmr
+cp /usr/sys/dmr/tty.c dmr
+cp /usr/sys/dmr/vs.c dmr
+cp /usr/sys/dmr/vt.c dmr
+
+mkdir conf
+cp /usr/sys/conf/c.c conf
+cp /usr/sys/conf/data.s conf
+cp /usr/sys/conf/l.s conf
+cp /usr/sys/conf/m40.s conf
+cp /usr/sys/conf/m45.s conf
+cp /usr/sys/conf/mkconf.c conf
+cp /usr/sys/conf/sysfix conf
+cp /usr/sys/conf/sysfix.c conf
+
+```
+
+### 2.3 Tweak the source code
+
+Ed is the only tool avaliable to edit the file.
+```
+cd /usr/data/ken
+ed main.c
+75
+i
+    printf("Hello")
+.
+w
+q
+```
+This will print a new line when system boots.
+
+### 2.4 Build the code
+
+Build the makeconf tool.
+
+```
+chdir /usr/data/conf
+cc mkconf.c
+mv a.out mkconf
+```
+mkconf is what configures the system to support various device types. Run makeconf,tell it about our attached devices - rk05’s, tape reader and tape punch, magtape, DECtape, serial terminals, and line printer:
+```
+./mkconf
+rk
+pc
+tm
+tc
+8dc
+lp
+done
+```
+It will generate c.c based on hardware configuration.
+
+m40.s is the machine language assist file
+c.c is the configuration table containing the major device switches for each device class, block or character.
+l.s is the trap vectors for the devices
+
+```
+mkdir ../bin
+
+as m40.s
+mv a.out m40.o
+cc -c c.c
+as l.s
+mv a.out l.o
+
+mv c.o ../bin
+mv l.o ../bin
+mv m40.o ../bin
+```
+
+Then go to ken and dmr and compile allthe .c files and copy all the *.o file to the bin folder.
+```
+chdir ../ken
+cc -c *.c
+
+mv alloc.o ../bin
+mv clock.o ../bin
+mv fio.o ../bin
+mv iget.o ../bin
+mv main.o ../bin
+mv malloc.o ../bin
+mv nami.o ../bin
+mv pipe.o ../bin
+mv prf.o ../bin
+mv rdwri.o ../bin
+mv sig.o ../bin
+mv slp.o ../bin
+mv subr.o ../bin
+mv sys1.o ../bin
+mv sys2.o ../bin
+mv sys3.o ../bin
+mv sys4.o ../bin
+mv sysent.o ../bin
+mv text.o ../bin
+mv trap.o ../bin
+
+chdir ../dmr
+cc -c *.c
+mv bio.o ../bin
+mv cat.o ../bin
+mv dc.o ../bin
+mv dh.o ../bin
+mv dhdm.o ../bin
+mv dhfdm.o ../bin
+mv dn.o ../bin
+mv dp.o ../bin
+mv hp.o ../bin
+mv hs.o ../bin
+mv ht.o ../bin
+mv kl.o ../bin
+mv lp.o ../bin
+mv mem.o ../bin
+mv partab.o ../bin
+mv pc.o ../bin
+mv rf.o ../bin
+mv rk.o ../bin
+mv rp.o ../bin
+mv sys.o ../bin
+mv tc.o ../bin
+mv tm.o ../bin
+mv tty.o ../bin
+mv vs.o ../bin
+mv vt.o ../bin
+```
+
+The final step, link all the o files:
+
+```
+ld -X -n \
+m40.o l.o \
+main.o prf.o slp.o text.o subr.o trap.o\
+sys.o sys1.o sys2.o sys3.o sys4.o sysent.o sig.o \
+alloc.o bio.o fio.o iget.o nami.o pipe.o rdwri.o \
+clock.o malloc.o mem.o partab.o pc.o \
+tty.o kl.o rk.o lp.o tm.o \
+c.o
+```
+Note the order of the o files are important, m40.o and l.o must be the first.
+The parameter -n will remove the default a.out header and create only pure binaries, making sure the low core is at address 0.
+
+```
+mv a.out /unix
+```
+
+Reboot Simh, and enter @unix, to let the machine boot from the binaries we have just built. Now you should be able to see the "Hello" message.
+
